@@ -1,0 +1,14 @@
+{
+  "title": "SunoTube Studio",
+  "uploadAudio": "העלאת שיר (Suno)",
+  "uploadImage": "תמונת רקע",
+  "previewTitle": "תצוגה מקדימה",
+  "aspectRatio": "פורמט מסך",
+  "youtubeStandard": "יוטיוב רגיל (16:9)",
+  "youtubeShorts": "שורטס (9:16)",
+  "filenameLabel": "שם הקובץ (אופציונלי)",
+  "filenamePlaceholder": "הכנס שם לקובץ...",
+  "download": "הורדת קליפ",
+  "processing": "מעבד וידאו...",
+  "selectLanguage": "שפה"
+}

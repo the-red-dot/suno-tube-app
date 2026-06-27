@@ -1,0 +1,14 @@
+{
+  "title": "SunoTube Studio",
+  "uploadAudio": "Загрузить трек (Suno)",
+  "uploadImage": "Фоновое изображение",
+  "previewTitle": "Предварительный просмотр",
+  "aspectRatio": "Формат экрана",
+  "youtubeStandard": "Обычный YouTube (16:9)",
+  "youtubeShorts": "YouTube Shorts (9:16)",
+  "filenameLabel": "Имя файла (необязательно)",
+  "filenamePlaceholder": "Введите имя файла...",
+  "download": "Скачать клип",
+  "processing": "Обработка видео...",
+  "selectLanguage": "Язык"
+}
