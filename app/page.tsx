@@ -19,6 +19,10 @@ export default function SunoTubeApp() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [filename, setFilename] = useState('');
   
+  // Metadata states
+  const [audioMeta, setAudioMeta] = useState<{size: string, duration: string, bitrate: string} | null>(null);
+  const [imageMeta, setImageMeta] = useState<{size: string, dimensions: string} | null>(null);
+
   // Preview states
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
@@ -26,13 +30,12 @@ export default function SunoTubeApp() {
   const [progress, setProgress] = useState(0);
   const [isFfmpegLoaded, setIsFfmpegLoaded] = useState(false);
 
-  // FFmpeg reference - מתחילים אותו כריק (null) כדי למנוע קריסה בשרת
+  // FFmpeg reference
   const ffmpegRef = useRef<any>(null);
 
   // אתחול המנוע ועיצוב השפה בטעינה הראשונית (רץ רק בדפדפן)
   useEffect(() => {
     const loadFFmpeg = async () => {
-      // מאתחלים את המנוע רק עכשיו כשאנחנו בטוחים שאנחנו בדפדפן ולא בשרת
       if (!ffmpegRef.current) {
         ffmpegRef.current = new FFmpeg();
       }
@@ -40,7 +43,6 @@ export default function SunoTubeApp() {
       const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
       const ffmpeg = ffmpegRef.current;
       
-      // האזנה להתקדמות האחוזים
       ffmpeg.on('progress', ({ progress }: any) => {
         setProgress(Math.round(progress * 100));
       });
@@ -61,24 +63,55 @@ export default function SunoTubeApp() {
     document.body.dir = i18n.language === 'he' ? 'rtl' : 'ltr';
   }, [i18n.language]);
 
-  // יצירת קישורים זמניים לתצוגה מקדימה
+  // יצירת קישורים לתצוגה מקדימה ושליפת נתוני Metadata עבור האודיו
   useEffect(() => {
     if (audioFile) {
       const url = URL.createObjectURL(audioFile);
       setAudioUrl(url);
+
+      const aud = new window.Audio(url);
+      aud.onloadedmetadata = () => {
+        const duration = aud.duration;
+        const mins = Math.floor(duration / 60);
+        const secs = Math.floor(duration % 60).toString().padStart(2, '0');
+        // חישוב מוערך של הביטרייט: גודל בביטים חלקי זמן
+        const kbps = Math.round((audioFile.size * 8) / duration / 1000);
+        const sizeMb = (audioFile.size / (1024 * 1024)).toFixed(2);
+        
+        setAudioMeta({
+          size: `${sizeMb} MB`,
+          duration: `${mins}:${secs}`,
+          bitrate: `${kbps} kbps`
+        });
+      };
+
       return () => URL.revokeObjectURL(url);
     } else {
       setAudioUrl(null);
+      setAudioMeta(null);
     }
   }, [audioFile]);
 
+  // יצירת קישורים לתצוגה מקדימה ושליפת נתוני Metadata עבור התמונה
   useEffect(() => {
     if (imageFile) {
       const url = URL.createObjectURL(imageFile);
       setImageUrl(url);
+
+      const img = new window.Image();
+      img.src = url;
+      img.onload = () => {
+        const sizeMb = (imageFile.size / (1024 * 1024)).toFixed(2);
+        setImageMeta({
+          size: `${sizeMb} MB`,
+          dimensions: `${img.width}x${img.height}`
+        });
+      };
+
       return () => URL.revokeObjectURL(url);
     } else {
       setImageUrl(null);
+      setImageMeta(null);
     }
   }, [imageFile]);
 
@@ -101,22 +134,21 @@ export default function SunoTubeApp() {
     try {
       const ffmpeg = ffmpegRef.current;
       
-      // 1. כתיבת הקבצים לזכרון הוירטואלי של הדפדפן
       await ffmpeg.writeFile('audio', await fetchFile(audioFile));
       await ffmpeg.writeFile('image', await fetchFile(imageFile));
 
-      // 2. הגדרת פילטר לשינוי יחס גובה-רוחב כולל רקע שחור והתאמה מושלמת
       const scaleFilter = ratio === '16:9' 
         ? 'scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2' 
         : 'scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2';
 
-      // 3. הפעלת פקודת העיבוד (שמירה על 320k בסאונד בשביל האיכות מסונו)
+      // הפקודה שודרגה עם '-preset ultrafast' לזינוק אדיר במהירות העיבוד!
       await ffmpeg.exec([
         '-loop', '1',
         '-i', 'image',
         '-i', 'audio',
         '-vf', scaleFilter,
         '-c:v', 'libx264',
+        '-preset', 'ultrafast',
         '-tune', 'stillimage',
         '-c:a', 'aac',
         '-b:a', '320k', 
@@ -125,10 +157,7 @@ export default function SunoTubeApp() {
         'output.mp4'
       ]);
 
-      // 4. קריאת הקובץ המוכן והפיכתו לקישור הורדה לנייד/מחשב
       const data = await ffmpeg.readFile('output.mp4');
-      
-      // עוקפים את הבדיקה המחמירה של TypeScript עבור SharedArrayBuffer
       const videoBlob = new Blob([data as any], { type: 'video/mp4' });
       const url = URL.createObjectURL(videoBlob);
       
@@ -177,6 +206,16 @@ export default function SunoTubeApp() {
               <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-inherit rounded-xl hover:border-[#DEFF9A] cursor-pointer bg-black/20">
                 {audioFile ? <CheckCircle2 className="text-[#DEFF9A] mb-2" /> : <Music className="text-[#DEFF9A] mb-2" />}
                 <span className="text-sm font-medium text-center px-4">{audioFile ? audioFile.name : t('uploadAudio', { defaultValue: 'העלאת שיר (Suno)' })}</span>
+                {/* הצגת פרטי שמע */}
+                {audioMeta && (
+                  <div className="text-xs text-gray-400 mt-2 flex gap-2 items-center flex-wrap justify-center">
+                    <span>{t('duration', { defaultValue: 'אורך:' })} {audioMeta.duration}</span>
+                    <span className="text-[#333]">|</span>
+                    <span className="text-[#DEFF9A]">{t('bitrate', { defaultValue: 'איכות:' })} ~{audioMeta.bitrate}</span>
+                    <span className="text-[#333]">|</span>
+                    <span>{audioMeta.size}</span>
+                  </div>
+                )}
                 <input type="file" className="hidden" accept="audio/*" onChange={(e) => setAudioFile(e.target.files?.[0] || null)} />
               </label>
             </div>
@@ -185,13 +224,21 @@ export default function SunoTubeApp() {
               <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-inherit rounded-xl hover:border-[#DEFF9A] cursor-pointer bg-black/20">
                 {imageFile ? <CheckCircle2 className="text-[#DEFF9A] mb-2" /> : <ImageIcon className="text-[#DEFF9A] mb-2" />}
                 <span className="text-sm font-medium text-center px-4">{imageFile ? imageFile.name : t('uploadImage', { defaultValue: 'תמונת רקע' })}</span>
+                {/* הצגת פרטי תמונה */}
+                {imageMeta && (
+                  <div className="text-xs text-gray-400 mt-2 flex gap-2 items-center flex-wrap justify-center">
+                    <span className="text-[#DEFF9A]">{t('resolution', { defaultValue: 'רזולוציה:' })} {imageMeta.dimensions}</span>
+                    <span className="text-[#333]">|</span>
+                    <span>{imageMeta.size}</span>
+                  </div>
+                )}
                 <input type="file" className="hidden" accept="image/*" onChange={(e) => setImageFile(e.target.files?.[0] || null)} />
               </label>
             </div>
           </div>
         </section>
 
-        {/* Step 1.5: Preview (Show only when both files are uploaded) */}
+        {/* Step 1.5: Preview */}
         {imageUrl && audioUrl && (
           <section className="bg-[#1e1e1e] p-6 rounded-2xl border border-[#333] animate-in fade-in slide-in-from-bottom-4 duration-500">
             <h3 className="flex items-center gap-2 mb-4 font-bold text-lg">
@@ -199,19 +246,13 @@ export default function SunoTubeApp() {
               {t('previewTitle', { defaultValue: 'תצוגה מקדימה' })}
             </h3>
             <div className="flex flex-col items-center gap-4">
-              {/* Image Preview Container */}
               <div 
                 className={`relative w-full bg-black rounded-xl overflow-hidden flex items-center justify-center transition-all duration-300 border border-[#333] shadow-inner ${
                   ratio === '16:9' ? 'aspect-video max-w-sm' : 'aspect-[9/16] max-w-[220px]'
                 }`}
               >
-                {/* Using object-contain simulates how FFmpeg pad works 
-                  It keeps the whole image visible, padding with black bars if needed 
-                */}
                 <img src={imageUrl} alt="Preview" className="w-full h-full object-contain" />
               </div>
-              
-              {/* Audio Player */}
               <audio controls src={audioUrl} className="w-full max-w-sm h-10 outline-none" />
             </div>
           </section>
@@ -288,7 +329,7 @@ export default function SunoTubeApp() {
       </main>
 
       <footer className="mt-12 text-center text-gray-500 text-sm">
-        v1.2 | Added Live Preview & Custom Filename
+        v1.3 | Ultrafast Rendering & File Metadata Extraction
       </footer>
     </div>
   );
